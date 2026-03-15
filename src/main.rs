@@ -1,7 +1,12 @@
-use std::{borrow::Cow, cmp::min, io};
+use std::{cmp::min, io};
 
-use ratatui::{crossterm::{event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEventKind}, execute}, style::Color, text::Text};
-use ratatui::{buffer::Buffer, layout::Rect, style::{Modifier, Style, Stylize}, symbols::{self, border}, text::{Span, ToSpan}, widgets::{Block, Borders, Paragraph, Widget}, DefaultTerminal, Frame};
+use ratatui::{crossterm::{event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEventKind}, execute}, layout::Size, style::Color, text::Text};
+use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget, DefaultTerminal, Frame};
+
+const SIZE: Size = Size {
+    width: 6,
+    height: 3,
+};
 
 #[derive(Clone)]
 struct Klot {
@@ -105,16 +110,18 @@ impl App {
                 }
             }
             Event::Mouse(ev) => {
+                let mx = ev.column / SIZE.width;
+                let my = ev.row / SIZE.height;
                 match ev.kind {
                     MouseEventKind::Down(MouseButton::Left) => {
-                        if let Some(idx) = self.get_klot(ev.column, ev.row) {
-                            self.selected = Some((idx, ev.column - self.klots[idx].x, ev.row - self.klots[idx].y));
+                        if let Some(idx) = self.get_klot(mx, my) {
+                            self.selected = Some((idx, mx - self.klots[idx].x, my - self.klots[idx].y));
                         }
                     }
                     MouseEventKind::Drag(MouseButton::Left) => {
                         if let Some((klot_idx, off_x, off_y)) = self.selected {
-                            let x = if ev.column > off_x {ev.column - off_x} else {0};
-                            let y = if ev.row > off_y {ev.row - off_y} else {0};
+                            let x = if mx > off_x {mx - off_x} else {0};
+                            let y = if my > off_y {my - off_y} else {0};
                             self.try_move(klot_idx, x, y);
                         }
                     }
@@ -130,8 +137,12 @@ impl App {
 impl Widget for &App {
     fn render(self, area: Rect, buf: &mut Buffer) {
         for klot in &self.klots {
-            for x in klot.x..(klot.x + klot.w) {
-                for y in klot.y..(klot.y + klot.h) {
+            let x_start = klot.x * SIZE.width;
+            let y_start = klot.y * SIZE.height;
+            let x_end = (klot.x + klot.w) * SIZE.width;
+            let y_end = (klot.y + klot.h) * SIZE.height;
+            for x in x_start..x_end {
+                for y in y_start..y_end {
                     let c = buf.cell_mut((x, y)).unwrap();
                     c.set_bg(klot.color);
                 }
