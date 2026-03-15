@@ -1,4 +1,4 @@
-use std::{cmp::min, io};
+use std::{cmp::min, collections::HashMap, fs::File, io::{self, Read}};
 
 use ratatui::{crossterm::{event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, MouseButton, MouseEventKind}, execute}, layout::Size, style::Color, text::Text};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget, DefaultTerminal, Frame};
@@ -40,6 +40,39 @@ impl App {
             selected: None,
             debug: String::new()
         }
+    }
+
+    fn init_from_file(fh: &mut File) -> io::Result<Self> {
+        let mut content = String::new();
+        fh.read_to_string(&mut content)?;
+        let mut klots: HashMap<char, Klot> = HashMap::new();
+        let mut width = 0;
+        let mut height = 0;
+        let mut c_idx = 1; // skip black
+        for (fy, line) in content.lines().enumerate() {
+            for (fx, c) in line.char_indices() {
+                match c {
+                    '+' | '-' | '|' | ' ' => {}
+                    '_' => {
+                        // todo
+                    }
+                    _ => {
+                        let x = (fx - 1) as u16;
+                        let y = (fy - 1) as u16;
+                        if let Some(klot) = klots.get_mut(&c) {
+                            klot.w = x + 1 - klot.x;
+                            klot.h = y + 1 - klot.y;
+                        } else {
+                            klots.insert(c, Klot { x, y, w: 1, h: 1, color: Color::Indexed(c_idx)});
+                            c_idx += 1;
+                        }
+                    }
+                }
+                width = fx;
+            }
+            height = fy;
+        }
+        Ok(Self::init(klots.into_values().collect(), width as u16 - 1, height as u16 - 1))
     }
 
     fn get_klot(&self, x: u16, y: u16) -> Option<usize> {
@@ -116,6 +149,8 @@ impl App {
                     MouseEventKind::Down(MouseButton::Left) => {
                         if let Some(idx) = self.get_klot(mx, my) {
                             self.selected = Some((idx, mx - self.klots[idx].x, my - self.klots[idx].y));
+                        } else {
+                            self.selected = None;
                         }
                     }
                     MouseEventKind::Drag(MouseButton::Left) => {
@@ -153,18 +188,19 @@ impl Widget for &App {
 }
 
 fn main() -> io::Result<()> {
-    let mut app = App::init(vec![
-        Klot { x:1,y:0, w:2,h:2, color: Color::Cyan },
-        Klot { x:0,y:0, w:1,h:2, color: Color::Green },
-        Klot { x:3,y:0, w:1,h:2, color: Color::Blue },
-        Klot { x:0,y:2, w:1,h:2, color: Color::Red },
-        Klot { x:3,y:2, w:1,h:2, color: Color::Yellow },
-        Klot { x:1,y:2, w:2,h:1, color: Color::Magenta },
-        Klot { x:1,y:3, w:1,h:1, color: Color::White },
-        Klot { x:2,y:3, w:1,h:1, color: Color::LightGreen },
-        Klot { x:0,y:4, w:1,h:1, color: Color::DarkGray },
-        Klot { x:3,y:4, w:1,h:1, color: Color::LightRed },
-    ], 4, 5);
+    let mut args = std::env::args();
+
+    if args.len() != 2 {
+        println!("Usage: {} <challenge_file>", args.next().unwrap());
+        return Ok(())
+    }
+    args.next();
+
+    let filename = args.next().unwrap();
+    let mut file = File::open(filename)?;
+
+    let mut app = App::init_from_file(&mut file)?;
+
     let mut terminal = ratatui::init();
     execute!(io::stdout(), EnableMouseCapture).unwrap();
     let res = app.run(&mut terminal);
